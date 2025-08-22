@@ -12,27 +12,33 @@ import { Calculator, TrendingUp, Home } from "lucide-react"
 
 export default function MortgageCalculator() {
   // 基本試算狀態
-  const [housePrice, setHousePrice] = useState(8000000)
-  const [downPayment, setDownPayment] = useState(1600000)
-  const [interestRate, setInterestRate] = useState(2.06)
-  const [loanTerm, setLoanTerm] = useState("30")
-  const [customTerm, setCustomTerm] = useState(30)
-  const [paymentMethod, setPaymentMethod] = useState("equal-payment")
+  const [housePrice, setHousePrice] = useState(0)
+  const [downPayment, setDownPayment] = useState(0)
+  const [loanRatio, setLoanRatio] = useState(0) // 新增：貸款成數
+  const [useRatioCalculation, setUseRatioCalculation] = useState(false) // 新增：是否使用成數計算
+  const [useTwoTierRate, setUseTwoTierRate] = useState(false) // 新增：是否使用兩段式利率
+  const [tierThreshold, setTierThreshold] = useState(10000000) // 新增：分級門檻
+  const [lowerTierRate, setLowerTierRate] = useState(0) // 新增：低額利率
+  const [higherTierRate, setHigherTierRate] = useState(0) // 新增：高額利率
+  const [interestRate, setInterestRate] = useState(0)
+  const [loanTerm, setLoanTerm] = useState("")
+  const [customTerm, setCustomTerm] = useState(0)
+  const [paymentMethod, setPaymentMethod] = useState("")
   const [gracePeriod, setGracePeriod] = useState(0)
   // 移除這些狀態
   // const [processingFee, setProcessingFee] = useState(3000)
   // const [insurance, setInsurance] = useState(0)
   // const [monthlyInsurance, setMonthlyInsurance] = useState(0)
-  const [penaltyRate, setPenaltyRate] = useState(1.0)
+  const [penaltyRate, setPenaltyRate] = useState(0)
 
   // 提前還款狀態
-  const [prepaymentYear, setPrepaymentYear] = useState("5")
-  const [prepaymentMethod, setPrepaymentMethod] = useState("full")
-  const [prepaymentAmount, setPrepaymentAmount] = useState(1000000)
+  const [prepaymentYear, setPrepaymentYear] = useState("")
+  const [prepaymentMethod, setPrepaymentMethod] = useState("")
+  const [prepaymentAmount, setPrepaymentAmount] = useState(0)
 
   // 新青安狀態
-  const [youngLoanPrice, setYoungLoanPrice] = useState(8000000)
-  const [youngDownPayment, setYoungDownPayment] = useState(1600000)
+  const [youngLoanPrice, setYoungLoanPrice] = useState(0)
+  const [youngDownPayment, setYoungDownPayment] = useState(0)
 
   // 新增：新青安方案基準參數
   const [baseRate, setBaseRate] = useState(1.72)
@@ -44,20 +50,45 @@ export default function MortgageCalculator() {
   const [maxGracePeriod, setMaxGracePeriod] = useState(5)
 
   // 新增：額外費用項目
-  const [youngProcessingFee, setYoungProcessingFee] = useState(3000)
+  const [youngProcessingFee, setYoungProcessingFee] = useState(0)
   const [youngSetupFee, setYoungSetupFee] = useState(0)
-  const [youngAccountFee, setYoungAccountFee] = useState(300)
-  const [youngAppraisalFee, setYoungAppraisalFee] = useState(3000)
-  const [youngNotaryFee, setYoungNotaryFee] = useState(8000)
-  const [youngInsuranceFee, setYoungInsuranceFee] = useState(2000)
+  const [youngAccountFee, setYoungAccountFee] = useState(0)
+  const [youngAppraisalFee, setYoungAppraisalFee] = useState(0)
+  const [youngNotaryFee, setYoungNotaryFee] = useState(0)
+  const [youngInsuranceFee, setYoungInsuranceFee] = useState(0)
   const [youngTransferFee, setYoungTransferFee] = useState(0)
-  const [mortgageRegistrationFee, setMortgageRegistrationFee] = useState(6400) // 新增
+  const [mortgageRegistrationFee, setMortgageRegistrationFee] = useState(0) // 新增
 
   // 計算函數
   const calculateBasicLoan = () => {
-    const loanAmount = housePrice - downPayment
+    // 根據是否使用成數計算來決定貸款金額和頭期款
+    let actualDownPayment = downPayment
+    let loanAmount = housePrice - downPayment
+    
+    if (useRatioCalculation && housePrice > 0 && loanRatio > 0) {
+      loanAmount = housePrice * (loanRatio / 100)
+      actualDownPayment = housePrice - loanAmount
+    } else {
+      loanAmount = housePrice - downPayment
+      actualDownPayment = downPayment
+    }
     const actualTerm = loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)
-    const monthlyRate = interestRate / 100 / 12
+    
+    // 計算有效利率（支持兩段式利率）
+    let effectiveRate = interestRate
+    let isTwoTier = false
+    let lowerAmount = 0
+    let higherAmount = 0
+    
+    if (useTwoTierRate && loanAmount > tierThreshold) {
+      isTwoTier = true
+      lowerAmount = tierThreshold
+      higherAmount = loanAmount - tierThreshold
+      // 加權平均利率計算
+      effectiveRate = (lowerTierRate * lowerAmount + higherTierRate * higherAmount) / loanAmount
+    }
+    
+    const monthlyRate = effectiveRate / 100 / 12
     const totalMonths = actualTerm * 12
     const graceMonths = gracePeriod
 
@@ -146,6 +177,7 @@ export default function MortgageCalculator() {
 
     return {
       loanAmount,
+      actualDownPayment,
       monthlyPayment,
       graceMonthlyPayment,
       normalMonthlyPayment,
@@ -157,6 +189,11 @@ export default function MortgageCalculator() {
       hasGracePeriod: graceMonths > 0,
       graceMonths,
       remainingMonths: graceMonths > 0 ? totalMonths - graceMonths : totalMonths,
+      isTwoTier,
+      lowerAmount,
+      higherAmount,
+      effectiveRate,
+      originalRate: interestRate,
     }
   }
 
@@ -371,7 +408,7 @@ export default function MortgageCalculator() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">房貸計算器</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">【好理家在】房貸計算器</h1>
           <p className="text-gray-600">專業的房貸試算工具，幫您精準規劃購屋財務</p>
         </div>
 
@@ -409,40 +446,122 @@ export default function MortgageCalculator() {
                       <Input
                         id="house-price"
                         type="number"
-                        value={housePrice}
+                        value={housePrice || ""}
                         onChange={(e) => setHousePrice(Number(e.target.value))}
-                        placeholder="8000000"
+                        placeholder="請輸入房屋成交價格"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="down-payment">頭期款</Label>
-                      <Input
-                        id="down-payment"
-                        type="number"
-                        value={downPayment}
-                        onChange={(e) => setDownPayment(Number(e.target.value))}
-                        placeholder="1600000"
-                      />
+                      <Label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={useRatioCalculation}
+                          onChange={(e) => setUseRatioCalculation(e.target.checked)}
+                          className="rounded"
+                        />
+                        使用貸款成數計算頭期款
+                      </Label>
+                      {useRatioCalculation ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label htmlFor="loan-ratio" className="text-sm">貸款成數 (%)</Label>
+                            <Input
+                              id="loan-ratio"
+                              type="number"
+                              value={loanRatio || ""}
+                              onChange={(e) => setLoanRatio(Number(e.target.value))}
+                              placeholder="例如：80"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm">計算出的頭期款</Label>
+                            <div className="p-2 bg-gray-50 rounded text-sm">
+                              {housePrice && loanRatio ? formatCurrency(housePrice - housePrice * (loanRatio / 100)) : "請先輸入房價和成數"}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <Label htmlFor="down-payment">頭期款</Label>
+                          <Input
+                            id="down-payment"
+                            type="number"
+                            value={downPayment || ""}
+                            onChange={(e) => setDownPayment(Number(e.target.value))}
+                            placeholder="請輸入頭期款金額"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="interest-rate">貸款年利率 (%)</Label>
-                      <Input
-                        id="interest-rate"
-                        type="number"
-                        step="0.01"
-                        value={interestRate}
-                        onChange={(e) => setInterestRate(Number(e.target.value))}
-                        placeholder="2.06"
-                      />
+                      <Label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={useTwoTierRate}
+                          onChange={(e) => setUseTwoTierRate(e.target.checked)}
+                          className="rounded"
+                        />
+                        使用兩段式利率計算
+                      </Label>
+                      {useTwoTierRate ? (
+                        <div className="space-y-2">
+                          <div>
+                            <Label htmlFor="tier-threshold" className="text-sm">分級門檻金額</Label>
+                            <Input
+                              id="tier-threshold"
+                              type="number"
+                              value={tierThreshold || ""}
+                              onChange={(e) => setTierThreshold(Number(e.target.value))}
+                              placeholder="例如：10000000"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label htmlFor="lower-tier-rate" className="text-sm">低額利率 (%)</Label>
+                              <Input
+                                id="lower-tier-rate"
+                                type="number"
+                                step="0.01"
+                                value={lowerTierRate || ""}
+                                onChange={(e) => setLowerTierRate(Number(e.target.value))}
+                                placeholder="例如：2.0"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="higher-tier-rate" className="text-sm">高額利率 (%)</Label>
+                              <Input
+                                id="higher-tier-rate"
+                                type="number"
+                                step="0.01"
+                                value={higherTierRate || ""}
+                                onChange={(e) => setHigherTierRate(Number(e.target.value))}
+                                placeholder="例如：2.5"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <Label htmlFor="interest-rate">貸款年利率 (%)</Label>
+                          <Input
+                            id="interest-rate"
+                            type="number"
+                            step="0.01"
+                            value={interestRate || ""}
+                            onChange={(e) => setInterestRate(Number(e.target.value))}
+                            placeholder="請輸入貸款年利率"
+                          />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="loan-term">貸款年期</Label>
                       <Select value={loanTerm} onValueChange={setLoanTerm}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="請選擇貸款年期" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="20">20年期</SelectItem>
@@ -459,9 +578,9 @@ export default function MortgageCalculator() {
                       <Input
                         id="custom-term"
                         type="number"
-                        value={customTerm}
+                        value={customTerm || ""}
                         onChange={(e) => setCustomTerm(Number(e.target.value))}
-                        placeholder="25"
+                        placeholder="請輸入自訂年期"
                       />
                     </div>
                   )}
@@ -471,7 +590,7 @@ export default function MortgageCalculator() {
                       <Label htmlFor="payment-method">還款方式</Label>
                       <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="請選擇還款方式" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="equal-payment">本息平均攤還</SelectItem>
@@ -484,9 +603,9 @@ export default function MortgageCalculator() {
                       <Input
                         id="grace-period"
                         type="number"
-                        value={gracePeriod}
+                        value={gracePeriod || ""}
                         onChange={(e) => setGracePeriod(Number(e.target.value))}
-                        placeholder="0"
+                        placeholder="請輸入寬限期月數"
                       />
                     </div>
                   </div>
@@ -515,9 +634,9 @@ export default function MortgageCalculator() {
                         id="penalty-rate"
                         type="number"
                         step="0.1"
-                        value={penaltyRate}
+                        value={penaltyRate || ""}
                         onChange={(e) => setPenaltyRate(Number(e.target.value))}
-                        placeholder="1.0"
+                        placeholder="請輸入違約金率"
                       />
                     </div>
                   </div>
@@ -551,7 +670,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-processing-fee"
                         type="number"
-                        value={youngProcessingFee}
+                        value={youngProcessingFee || ""}
                         onChange={(e) => setYoungProcessingFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -565,7 +684,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-setup-fee"
                         type="number"
-                        value={youngSetupFee}
+                        value={youngSetupFee || ""}
                         onChange={(e) => setYoungSetupFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -579,7 +698,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-account-fee"
                         type="number"
-                        value={youngAccountFee}
+                        value={youngAccountFee || ""}
                         onChange={(e) => setYoungAccountFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -593,7 +712,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-appraisal-fee"
                         type="number"
-                        value={youngAppraisalFee}
+                        value={youngAppraisalFee || ""}
                         onChange={(e) => setYoungAppraisalFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -607,7 +726,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-notary-fee"
                         type="number"
-                        value={youngNotaryFee}
+                        value={youngNotaryFee || ""}
                         onChange={(e) => setYoungNotaryFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -621,7 +740,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-insurance-fee"
                         type="number"
-                        value={youngInsuranceFee}
+                        value={youngInsuranceFee || ""}
                         onChange={(e) => setYoungInsuranceFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -635,7 +754,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-transfer-fee"
                         type="number"
-                        value={youngTransferFee}
+                        value={youngTransferFee || ""}
                         onChange={(e) => setYoungTransferFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -649,7 +768,7 @@ export default function MortgageCalculator() {
                       <Input
                         id="mortgage-registration-fee"
                         type="number"
-                        value={mortgageRegistrationFee}
+                        value={mortgageRegistrationFee || ""}
                         onChange={(e) => setMortgageRegistrationFee(Number(e.target.value))}
                         className="border-orange-200 focus:border-orange-400"
                       />
@@ -673,9 +792,12 @@ export default function MortgageCalculator() {
                       <div className="text-xs text-gray-500 mt-2 border-t pt-2">
                         <div className="font-medium mb-1">計算歷程：</div>
                         <div>房屋成交價格：{formatCurrency(housePrice)}</div>
-                        <div>減：頭期款：{formatCurrency(downPayment)}</div>
+                        <div>減：頭期款：{formatCurrency(basicResults.actualDownPayment)}</div>
+                        {useRatioCalculation && (
+                          <div className="text-blue-600">（使用貸款成數 {loanRatio}% 計算）</div>
+                        )}
                         <div className="border-t mt-1 pt-1 font-medium">
-                          = {formatCurrency(housePrice)} - {formatCurrency(downPayment)} ={" "}
+                          = {formatCurrency(housePrice)} - {formatCurrency(basicResults.actualDownPayment)} ={" "}
                           {formatCurrency(basicResults.loanAmount)}
                         </div>
                       </div>
@@ -699,10 +821,24 @@ export default function MortgageCalculator() {
                       <div className="text-xs text-gray-500 mt-2 border-t pt-2">
                         <div className="font-medium mb-1">計算歷程：</div>
                         <div>貸款金額：{formatCurrency(basicResults.loanAmount)}</div>
-                        <div>年利率：{interestRate}%</div>
-                        <div>
-                          月利率：{interestRate}% ÷ 12 = {(interestRate / 12).toFixed(4)}%
-                        </div>
+                        {basicResults.isTwoTier ? (
+                          <>
+                            <div className="text-blue-600 font-medium">使用兩段式利率計算：</div>
+                            <div>低額部分：{formatCurrency(basicResults.lowerAmount)} × {lowerTierRate}%</div>
+                            <div>高額部分：{formatCurrency(basicResults.higherAmount)} × {higherTierRate}%</div>
+                            <div>有效年利率：{basicResults.effectiveRate.toFixed(3)}%</div>
+                            <div>
+                              月利率：{basicResults.effectiveRate.toFixed(3)}% ÷ 12 = {(basicResults.effectiveRate / 12).toFixed(4)}%
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>年利率：{interestRate}%</div>
+                            <div>
+                              月利率：{interestRate}% ÷ 12 = {(interestRate / 12).toFixed(4)}%
+                            </div>
+                          </>
+                        )}
                         <div>
                           總貸款期數：{loanTerm === "custom" ? customTerm : loanTerm}年 × 12 ={" "}
                           {(loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)) * 12}期
@@ -817,7 +953,7 @@ export default function MortgageCalculator() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="text-sm text-gray-600">總成本</div>
+                      <div className="text-sm text-gray-600">貸款總成本</div>
                       <div className="text-3xl font-bold text-gray-800">{formatCurrency(basicResults.totalCost)}</div>
                       <div className="text-xs text-gray-500 mt-2 border-t pt-2">
                         <div className="font-medium mb-1">計算歷程：</div>
@@ -864,7 +1000,10 @@ export default function MortgageCalculator() {
             <Card>
               <CardHeader>
                 <CardTitle>利率壓力測試</CardTitle>
-                <CardDescription>利率變動對月付金的影響分析</CardDescription>
+                <CardDescription>
+                  模擬利率上升或下降時對月付金的影響。此測試幫助您評估未來利率變動的財務風險，
+                  建議確保在利率上升1%時仍有能力負擔月付金。
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -896,6 +1035,16 @@ export default function MortgageCalculator() {
                     ))}
                   </TableBody>
                 </Table>
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <h4 className="font-semibold text-yellow-800 mb-2">💡 壓力測試說明</h4>
+                  <ul className="text-sm text-yellow-700 space-y-1">
+                    <li>• <strong>藍色背景</strong>：目前設定的利率水準</li>
+                    <li>• <strong>紅色背景</strong>：利率上升情況，月付金增加</li>
+                    <li>• <strong>綠色背景</strong>：利率下降情況，月付金減少</li>
+                    <li>• <strong>建議</strong>：確保在利率上升1%時仍能負擔月付金，以應對未來升息風險</li>
+                    <li>• <strong>注意</strong>：此為模擬計算，實際利率變動請參考央行政策及市場狀況</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
 
@@ -972,7 +1121,7 @@ export default function MortgageCalculator() {
                     <Label htmlFor="prepayment-year">提前還款時間點</Label>
                     <Select value={prepaymentYear} onValueChange={setPrepaymentYear}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="請選擇提前還款時間點" />
                       </SelectTrigger>
                       <SelectContent>
                         {Array.from({ length: 20 }, (_, i) => (
@@ -988,7 +1137,7 @@ export default function MortgageCalculator() {
                     <Label htmlFor="prepayment-method">提前還款方式</Label>
                     <Select value={prepaymentMethod} onValueChange={setPrepaymentMethod}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="請選擇提前還款方式" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="full">全額清償</SelectItem>
@@ -1004,12 +1153,27 @@ export default function MortgageCalculator() {
                       <Input
                         id="prepayment-amount"
                         type="number"
-                        value={prepaymentAmount}
+                        value={prepaymentAmount || ""}
                         onChange={(e) => setPrepaymentAmount(Number(e.target.value))}
-                        placeholder="1000000"
+                        placeholder="請輸入提前還款金額"
                       />
                     </div>
                   )}
+
+                  <div>
+                    <Label htmlFor="custom-penalty-rate">違約金率 (%)</Label>
+                    <Input
+                      id="custom-penalty-rate"
+                      type="number"
+                      step="0.1"
+                      value={penaltyRate || ""}
+                      onChange={(e) => setPenaltyRate(Number(e.target.value))}
+                      placeholder="請輸入違約金率，例如：1.0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      一般銀行違約金約為剩餘本金的1%~2%，實際費率請洽詢銀行
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1024,11 +1188,29 @@ export default function MortgageCalculator() {
                     <div className="text-2xl font-bold text-blue-600">
                       {formatCurrency(prepaymentResults.remainingBalance)}
                     </div>
+                    <div className="text-xs text-gray-500 mt-2 border-t pt-2">
+                      <div className="font-medium mb-1">計算過程：</div>
+                      <div>原始貸款金額：{formatCurrency(basicResults.loanAmount)}</div>
+                      <div>已還款期數：{prepaymentYear}年 × 12 = {Number.parseInt(prepaymentYear) * 12}期</div>
+                      <div>每月還款：{formatCurrency(basicResults.monthlyPayment)}</div>
+                      <div>已還本金：{formatCurrency(basicResults.loanAmount - prepaymentResults.remainingBalance)}</div>
+                      <div className="border-t mt-1 pt-1 font-medium">
+                        剩餘本金 = 原貸款 - 已還本金
+                      </div>
+                    </div>
                   </div>
 
                   <div className="bg-red-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-600">違約金</div>
                     <div className="text-xl font-bold text-red-600">{formatCurrency(prepaymentResults.penalty)}</div>
+                    <div className="text-xs text-gray-500 mt-2 border-t pt-2">
+                      <div className="font-medium mb-1">計算過程：</div>
+                      <div>剩餘本金：{formatCurrency(prepaymentResults.remainingBalance)}</div>
+                      <div>違約金率：{penaltyRate}%</div>
+                      <div className="border-t mt-1 pt-1 font-medium">
+                        違約金 = 剩餘本金 × {penaltyRate}% = {formatCurrency(prepaymentResults.penalty)}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="bg-green-50 p-4 rounded-lg">
@@ -1036,16 +1218,96 @@ export default function MortgageCalculator() {
                     <div className="text-xl font-bold text-green-600">
                       {formatCurrency(prepaymentResults.savedInterest)}
                     </div>
+                    <div className="text-xs text-gray-500 mt-2 border-t pt-2">
+                      <div className="font-medium mb-1">計算過程：</div>
+                      {prepaymentMethod === "full" ? (
+                        <>
+                          <div>剩餘期數：{((loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)) - Number.parseInt(prepaymentYear)) * 12}期</div>
+                          <div>原月付金：{formatCurrency(basicResults.monthlyPayment)}</div>
+                          <div>原剩餘總付款：{formatCurrency(basicResults.monthlyPayment * ((loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)) - Number.parseInt(prepaymentYear)) * 12)}</div>
+                          <div className="border-t mt-1 pt-1 font-medium">
+                            節省利息 = 原剩餘總付款 - 剩餘本金
+                          </div>
+                        </>
+                      ) : prepaymentMethod === "partial-same-term" ? (
+                        <>
+                          <div>原月付金：{formatCurrency(basicResults.monthlyPayment)}</div>
+                          <div>新月付金：{formatCurrency(prepaymentResults.newMonthlyPayment)}</div>
+                          <div>剩餘期數：{((loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)) - Number.parseInt(prepaymentYear)) * 12}期</div>
+                          <div className="border-t mt-1 pt-1 font-medium">
+                            節省利息 = (原月付金 - 新月付金) × 剩餘期數
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>縮短期限：約{prepaymentResults.shortenedTerm}年</div>
+                          <div>節省的月付金總額計算</div>
+                          <div className="border-t mt-1 pt-1 font-medium">
+                            節省利息 = 縮短期限 × 月付金 × 利息比例
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {prepaymentMethod === "partial-same-term" && (
                     <div className="bg-yellow-50 p-4 rounded-lg">
-                      <div className="text-sm text-gray-600">新月付金</div>
+                      <div className="text-sm text-gray-600">提前還款後新月付金</div>
                       <div className="text-xl font-bold text-yellow-600">
                         {formatCurrency(prepaymentResults.newMonthlyPayment)}
                       </div>
+                      <div className="text-xs text-gray-500 mt-2 border-t pt-2">
+                        <div className="font-medium mb-1">計算過程：</div>
+                        <div>提前還款金額：{formatCurrency(prepaymentAmount)}</div>
+                        <div>剩餘本金：{formatCurrency(prepaymentResults.remainingBalance)}</div>
+                        <div>新貸款餘額：{formatCurrency(prepaymentResults.remainingBalance - prepaymentAmount)}</div>
+                        <div>剩餘期數：{((loanTerm === "custom" ? customTerm : Number.parseInt(loanTerm)) - Number.parseInt(prepaymentYear)) * 12}期</div>
+                        <div className="border-t mt-1 pt-1 font-medium">
+                          新月付金 = 新貸款餘額在剩餘期數內重新計算
+                        </div>
+                        <div className="mt-2 p-2 bg-yellow-100 rounded">
+                          <div className="font-medium text-yellow-800">每月減少：{formatCurrency(basicResults.monthlyPayment - prepaymentResults.newMonthlyPayment)}</div>
+                          <div className="text-sm text-yellow-700">減少幅度：{((basicResults.monthlyPayment - prepaymentResults.newMonthlyPayment) / basicResults.monthlyPayment * 100).toFixed(1)}%</div>
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                  {/* 新增：提前還款總結 */}
+                  <div className="bg-gray-50 p-4 rounded-lg border-2 border-gray-200">
+                    <div className="text-sm text-gray-600 mb-2">💰 提前還款總結</div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="font-medium">需支付總額</div>
+                        <div className="text-lg font-bold text-red-600">
+                          {prepaymentMethod === "full" 
+                            ? formatCurrency(prepaymentResults.remainingBalance + prepaymentResults.penalty)
+                            : formatCurrency(prepaymentAmount + prepaymentResults.penalty)
+                          }
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {prepaymentMethod === "full" ? "剩餘本金" : "提前還款金額"} + 違約金
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-medium">淨節省金額</div>
+                        <div className="text-lg font-bold text-green-600">
+                          {formatCurrency(prepaymentResults.savedInterest - prepaymentResults.penalty)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          節省利息 - 違約金
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-2 bg-blue-50 rounded">
+                      <div className="text-sm font-medium text-blue-800">
+                        {prepaymentResults.savedInterest > prepaymentResults.penalty 
+                          ? "✅ 建議執行：提前還款可節省總成本" 
+                          : "❌ 不建議執行：違約金超過節省利息"
+                        }
+                      </div>
+                    </div>
+                  </div>
 
                   {prepaymentMethod === "partial-shorten-term" && prepaymentResults.shortenedTerm > 0 && (
                     <div className="bg-purple-50 p-4 rounded-lg">
@@ -1155,9 +1417,9 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-house-price"
                         type="number"
-                        value={youngLoanPrice}
+                        value={youngLoanPrice || ""}
                         onChange={(e) => setYoungLoanPrice(Number(e.target.value))}
-                        placeholder="8000000"
+                        placeholder="請輸入房屋成交價格"
                       />
                     </div>
                     <div>
@@ -1165,9 +1427,9 @@ export default function MortgageCalculator() {
                       <Input
                         id="young-down-payment"
                         type="number"
-                        value={youngDownPayment}
+                        value={youngDownPayment || ""}
                         onChange={(e) => setYoungDownPayment(Number(e.target.value))}
-                        placeholder="1600000"
+                        placeholder="請輸入頭期款金額"
                       />
                     </div>
                   </div>
@@ -1177,43 +1439,69 @@ export default function MortgageCalculator() {
               {/* 方案基準參數調整 */}
               <Card>
                 <CardHeader>
-                  <CardTitle>方案基準參數</CardTitle>
-                  <CardDescription>可調整參數以試算不同情境</CardDescription>
+                  <CardTitle>方案基準參數設定</CardTitle>
+                  <CardDescription>
+                    新青安貸款利率計算公式：最終利率 = 基準利率 - 減少調升 ± 政府補貼
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-semibold text-blue-800 mb-2">📊 利率計算說明</h4>
+                    <div className="text-sm text-blue-700 space-y-1">
+                      <div>• <strong>基準利率</strong>：中華郵政2年期定期儲金機動利率，目前約1.72%</div>
+                      <div>• <strong>減少調升</strong>：政策減少銀行調升幅度，目前為0.125%</div>
+                      <div>• <strong>政府補貼</strong>：前3年政府利率補貼，目前為0.375%</div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="base-rate">基準利率 (%)</Label>
+                      <Label htmlFor="base-rate" className="flex items-center gap-2">
+                        基準利率 (%)
+                        <span className="text-xs text-gray-500">（中華郵政2年期定儲利率）</span>
+                      </Label>
                       <Input
                         id="base-rate"
                         type="number"
                         step="0.01"
                         value={baseRate}
                         onChange={(e) => setBaseRate(Number(e.target.value))}
+                        placeholder="例如：1.72"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="rate-reduction">減少調升 (%)</Label>
+                      <Label htmlFor="rate-reduction" className="flex items-center gap-2">
+                        減少調升 (%)
+                        <span className="text-xs text-gray-500">（政策減少銀行調升）</span>
+                      </Label>
                       <Input
                         id="rate-reduction"
                         type="number"
                         step="0.001"
                         value={rateReduction}
                         onChange={(e) => setRateReduction(Number(e.target.value))}
+                        placeholder="例如：0.125"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="gov-subsidy">政府補貼 (%)</Label>
+                      <Label htmlFor="gov-subsidy" className="flex items-center gap-2">
+                        政府補貼 (%)
+                        <span className="text-xs text-gray-500">（前3年補貼）</span>
+                      </Label>
                       <Input
                         id="gov-subsidy"
                         type="number"
                         step="0.001"
                         value={govSubsidy}
                         onChange={(e) => setGovSubsidy(Number(e.target.value))}
+                        placeholder="例如：0.375"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        一段式：+補貼，二段式：前2年-補貼，第3年起+補貼
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="max-loan-amount">最高額度 (萬元)</Label>
@@ -1374,7 +1662,7 @@ export default function MortgageCalculator() {
                       <div>
                         <strong>政府利率補貼：</strong>
                         前3年利率約{youngLoanResults.rates.rate2_1.toFixed(3)}
-                        %，比一般優惠房貸的2.06%更低，大幅減輕利息負擔。
+                        %，比一般房貸的2.5%更低，大幅減輕利息負擔。
                       </div>
                     </li>
                     <li className="flex items-start gap-2">
@@ -1406,7 +1694,7 @@ export default function MortgageCalculator() {
                       <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
                       <div>
                         <strong>補貼期限有限：</strong>
-                        政府利率補貼期限有限，若2026年7月31日後利率調高，將會加重借款人的還款本息負擔。
+                        政府利率補貼期限至2026年7月31日，之後將依政策決定是否延續。若補貼取消，利率將回歸一般水準，大幅增加還款負擔。
                       </div>
                     </li>
                     <li className="flex items-start gap-2">
@@ -1492,6 +1780,18 @@ export default function MortgageCalculator() {
                 <CardTitle>新青安方案詳細說明</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="bg-orange-50 p-4 rounded border border-orange-200">
+                  <h3 className="font-semibold text-orange-800 mb-2">⏰ 方案時程規劃</h3>
+                  <div className="space-y-2 text-sm text-orange-700">
+                    <div><strong>第一階段</strong>（2023年8月1日～2026年7月31日）：政府提供利率補貼</div>
+                    <div><strong>第二階段</strong>（2026年8月1日後）：政策延續與否將視政府財政狀況及房市政策調整</div>
+                    <div className="mt-2 p-2 bg-orange-100 rounded">
+                      <div className="font-medium">⚠️ 重要提醒：</div>
+                      <div>2026年7月後若政府停止補貼，利率將調整為「基準利率 - 減少調升」，</div>
+                      <div>以目前參數計算約為 {(baseRate - rateReduction).toFixed(3)}%，較現行優惠利率上升約 {govSubsidy.toFixed(3)}%</div>
+                    </div>
+                  </div>
+                </div>
                 <div>
                   <h3 className="font-semibold mb-2">申請資格</h3>
                   <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
@@ -1516,13 +1816,39 @@ export default function MortgageCalculator() {
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-2">注意事項</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                    <li>本試算僅供參考，實際核貸條件以銀行審核為準</li>
-                    <li>利率可能因市場變動而調整</li>
-                    <li>申請前請詳閱各銀行相關規定</li>
-                    <li>建議多家銀行比較，選擇最適合的方案</li>
-                  </ul>
+                  <h3 className="font-semibold mb-2">重要限制與注意事項</h3>
+                  <div className="space-y-3">
+                    <div className="bg-red-50 p-3 rounded border border-red-200">
+                      <h4 className="font-semibold text-red-800 mb-2">🚫 使用限制</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-red-700">
+                        <li><strong>禁止出租</strong>：購買之住宅不得出租，須自住使用</li>
+                        <li><strong>不得轉讓</strong>：貸款期間內不得將房屋所有權轉讓他人</li>
+                        <li><strong>首購限制</strong>：借款人及其配偶、未成年子女均不得擁有其他自有住宅</li>
+                        <li><strong>收入限制</strong>：家庭年收入需符合各地區限制標準</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                      <h4 className="font-semibold text-yellow-800 mb-2">⚠️ 申請條件</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-yellow-700">
+                        <li><strong>年齡限制</strong>：申請人需年滿20歲</li>
+                        <li><strong>購屋總價</strong>：住宅總價需在新台幣1,000萬元以下</li>
+                        <li><strong>家庭年收入</strong>：一般地區120萬元以下，台北市150萬元以下</li>
+                        <li><strong>信用狀況</strong>：需有良好信用記錄，無重大信用瑕疵</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                      <h4 className="font-semibold text-blue-800 mb-2">📋 其他注意事項</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
+                        <li>本試算僅供參考，實際核貸條件以銀行審核為準</li>
+                        <li>利率補貼期限至2026年7月31日，之後利率可能調整</li>
+                        <li>申請前請詳閱各銀行相關規定與契約條款</li>
+                        <li>建議多家銀行比較，選擇最適合的方案</li>
+                        <li>違反使用限制可能面臨提前清償或其他法律責任</li>
+                      </ul>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
